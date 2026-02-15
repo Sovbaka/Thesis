@@ -1,0 +1,19 @@
+name = "thesis"
+version = "0.1.0"
+defaultTargets = ["thesis"]
+
+[[lean_lib]]
+name = "Thesis"
+roots = ["Thesis"]
+
+[[lean_exe]]
+name = "thesis"
+root = "Main"
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+
+[[require]]
+name = "Canonical"
+scope = "chasenorman"
