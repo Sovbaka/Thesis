@@ -289,7 +289,17 @@ theorem choiceM_classical_increasing_per_school
       (choiceM_classical school_pref quota T m).card := by
   intro S T hST
   unfold choiceM_classical
-  admit
+  -- Apply the lemma `topK_increasing` to the set of students applied to school `m`.
+  have h_topK_increasing : (Finset.image (fun e => e.2) (Finset.filter (fun e => e.1 = m) S)).card ≤ (Finset.image (fun e => e.2) (Finset.filter (fun e => e.1 = m) T)).card → (Finset.card (topK (school_pref m) (quota m) (Finset.image (fun e => e.2) (Finset.filter (fun e => e.1 = m) S)))) ≤ (Finset.card (topK (school_pref m) (quota m) (Finset.image (fun e => e.2) (Finset.filter (fun e => e.1 = m) T)))) := by
+    intro h;
+    exact Nat.le_trans ( topK_card _ ( h_linear m ) _ _ |> le_of_eq ) ( Nat.le_trans ( min_le_min_left _ h ) ( topK_card _ ( h_linear m ) _ _ |> ge_of_eq ) );
+  convert h_topK_increasing _ using 1;
+  · refine' Finset.card_bij ( fun x hx => x.2 ) _ _ _ <;> simp +contextual;
+    unfold topK; aesop;
+  · refine' Finset.card_bij ( fun x hx => x.2 ) _ _ _ <;> simp +decide;
+    · aesop;
+    · unfold topK; aesop;
+  · exact Finset.card_le_card ( Finset.image_subset_image <| Finset.filter_subset_filter _ hST )
 
 theorem choiceM_classical_increasing
     (school_pref : M → LinearPref W)
