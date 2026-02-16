@@ -12,6 +12,7 @@ import Mathlib.Order.Interval.Finset.Defs
 import Mathlib.Algebra.BigOperators.Group.Finset.Basic
 import Mathlib.Algebra.Order.BigOperators.Group.Finset
 import Mathlib.Order.Defs.PartialOrder
+import Mathlib.Data.Finset.Image
 
 
 set_option linter.unusedSectionVars false
@@ -1215,7 +1216,7 @@ theorem stable_matchings_same_size
 --
 -- Overall structure:
 -- 1. topK_path_independent (per-school choice is path independent)
--- 2. choiceM_all_path_independent (combined school choice is path independent) 
+-- 2. choiceM_all_path_independent (combined school choice is path independent)
 -- 3. fixedPointF_union_increasing (union of fixed points has increasing iteration)
 -- 4. choiceM_all_eq_of_sandwich (property 14 + cardinality → equality)
 -- 5. Main theorem assembly
@@ -1530,10 +1531,6 @@ theorem stable_matchings_form_lattice
 def isUnderSubscribed (quota : Quotas M) (S : Finset (M × W)) (m : M) : Prop :=
   (S.filter (fun e => e.1 = m)).card < quota m
 
-
-
-noncomputable section AristotleLemmas
-
 /-
 If a student is matched in a subset of proposals, they are also matched in the choice from the superset (because they will pick their favorite available option).
 -/
@@ -1614,12 +1611,12 @@ lemma school_card_le_choiceM_union
     (S T : Finset (M × W))
     (hS : ∀ m, S.filter (fun (e : M × W) => e.1 = m) = choiceM_classical school_pref quota S m)
     (m : M) :
-    Finset.card (S.filter (fun (e : M × W) => e.1 = m)) ≤ 
+    Finset.card (S.filter (fun (e : M × W) => e.1 = m)) ≤
     Finset.card ((choiceM_all school_pref quota (S ∪ T)).filter (fun (e : M × W) => e.1 = m)) := by
-  have h_choice_subset : Finset.card (S.filter (fun e => e.1 = m)) ≤ 
+  have h_choice_subset : Finset.card (S.filter (fun e => e.1 = m)) ≤
                          Finset.card (choiceM_classical school_pref quota (S ∪ T) m) := by
     rw [hS m]
-    apply choiceM_classical_increasing_per_school school_pref h_linear_m quota m S (S ∪ T) 
+    apply choiceM_classical_increasing_per_school school_pref h_linear_m quota m S (S ∪ T)
       Finset.subset_union_left
   convert h_choice_subset using 2
   ext ⟨x, y⟩
@@ -1641,30 +1638,52 @@ lemma stable_matching_is_self_choice
     (h_choice_eq : choiceM_all school_pref quota S_M = S_M ∩ S_W)
     (m : M) :
     (S_M ∩ S_W).filter (fun e => e.1 = m) = choiceM_classical school_pref quota (S_M ∩ S_W) m := by
+  -- Unfold choiceM_classical so ext gives a clean ↔ on Finset.mem_filter
+  unfold choiceM_classical
   ext ⟨a, b⟩
-  simp +decide [ choiceM_all, choiceM_classical ]
-  -- Goal is now: ↔ between two sides, both as chained implications after simp
-  -- But simp turns ↔ into two → goals or a single Prop.
-  -- Actually after simp on ↔, the goal is a single iff or has been split.
-  -- Let's use exact Iff.intro to handle both directions:
-  exact Iff.intro
-    (fun hSM hSW hab => by
-      subst hab
-      have h_in : (a, b) ∈ choiceM_all school_pref quota S_M :=
-        h_choice_eq ▸ Finset.mem_inter.mpr ⟨hSM, hSW⟩
-      simp only [choiceM_all, Finset.mem_biUnion, Finset.mem_univ, true_and] at h_in
-      obtain ⟨m', hm'⟩ := h_in
-      simp only [choiceM_classical, Finset.mem_filter] at hm'
-      have ha_eq : a = m' := hm'.2.1
-      subst ha_eq
-      exact topK_substitutability' (school_pref a) (h_linear_m a) (quota a)
-        (Finset.image Prod.snd (Finset.filter (fun e => e.1 = a) (S_M ∩ S_W)))
-        (Finset.image Prod.snd (Finset.filter (fun e => e.1 = a) S_M))
-        (Finset.image_subset_image (Finset.filter_subset_filter _ Finset.inter_subset_left))
-        (Finset.mem_image_of_mem _
-          (Finset.mem_filter.mpr ⟨Finset.mem_inter.mpr ⟨hSM, hSW⟩, rfl⟩))
-        hm'.2.2)
-    (fun hSM hSW _ _ => ⟨hSM, hSW, rfl⟩)
+  -- Now goal is: (a,b) ∈ filter(S_M∩S_W, ·.1=m) ↔ (a,b) ∈ filter(filter(S_M∩S_W, ·.1=m), ·.2 ∈ topK(...))
+  -- constructor works on ↔
+  constructor
+  · -- Forward: filter membership → choiceM_classical membership
+    intro hmem
+    -- Extract components from hmem
+    have h1 : (a, b) ∈ S_M ∩ S_W := (Finset.mem_filter.mp hmem).1
+    have hab : a = m := (Finset.mem_filter.mp hmem).2
+    have hSM : (a, b) ∈ S_M := (Finset.mem_inter.mp h1).1
+    have hSW : (a, b) ∈ S_W := (Finset.mem_inter.mp h1).2
+    subst hab
+    -- Show (a,b) ∈ choiceM_all S_M via h_choice_eq
+    have h_in_all : (a, b) ∈ choiceM_all school_pref quota S_M :=
+      h_choice_eq ▸ h1
+    -- Decompose choiceM_all into per-school choiceM_classical
+    simp only [choiceM_all, Finset.mem_biUnion, Finset.mem_univ, true_and] at h_in_all
+    obtain ⟨m', hm'⟩ := h_in_all
+    -- hm' : (a, b) ∈ choiceM_classical S_M m'
+    -- Extract first component = m' and topK membership
+    unfold choiceM_classical at hm'
+    have hm'_outer := Finset.mem_filter.mp hm'
+    -- hm'_outer.1 : (a,b) ∈ filter(S_M, ·.1=m')
+    -- hm'_outer.2 : b ∈ topK(school_pref m', quota m', students_{m'}(S_M))
+    have ha_m' : a = m' := (Finset.mem_filter.mp hm'_outer.1).2
+    subst ha_m'
+    -- Now we need: (a,b) ∈ filter(filter(S_M∩S_W, ·.1=a), ·.2 ∈ topK(..., students_a(S_M∩S_W)))
+    apply Finset.mem_filter.mpr
+    refine ⟨Finset.mem_filter.mpr ⟨Finset.mem_inter.mpr ⟨hSM, hSW⟩, rfl⟩, ?_⟩
+    -- Goal: b ∈ topK(school_pref a, quota a, students_a(S_M ∩ S_W))
+    -- We have: hm'_outer.2 : b ∈ topK(school_pref a, quota a, students_a(S_M))
+    -- Transfer via substitutability (S_M ∩ S_W ⊆ S_M)
+    have h_b_in : b ∈ Finset.image Prod.snd (Finset.filter (fun e => e.1 = a) (S_M ∩ S_W)) := by
+      apply Finset.mem_image.mpr
+      exact ⟨(a, b), Finset.mem_filter.mpr ⟨Finset.mem_inter.mpr ⟨hSM, hSW⟩, rfl⟩, rfl⟩
+    exact topK_substitutability' (school_pref a) (h_linear_m a) (quota a)
+      (Finset.image Prod.snd (Finset.filter (fun e => e.1 = a) (S_M ∩ S_W)))
+      (Finset.image Prod.snd (Finset.filter (fun e => e.1 = a) S_M))
+      (Finset.image_subset_image (Finset.filter_subset_filter _ Finset.inter_subset_left))
+      b h_b_in hm'_outer.2
+  · -- Reverse: choiceM_classical membership → filter membership
+    intro hmem
+    -- hmem : (a,b) ∈ filter(filter(S_M∩S_W, ·.1=m), ·.2 ∈ topK(...))
+    exact (Finset.mem_filter.mp hmem).1
 
 /-
 The number of students assigned to each school is the same in all stable matchings.
@@ -1732,19 +1751,6 @@ lemma stable_matching_school_card_eq
           by_contra h; push_neg at h
           exact h_join_sum2.not_lt (Finset.sum_lt_sum (fun m _ => h_le2 m) ⟨m, Finset.mem_univ m, h⟩))
       linarith [h_eq1 m, h_eq2 m]
-
-end AristotleLemmas
-
-
-
-
-
-
-
-
-
-
-
 
 
 
