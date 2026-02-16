@@ -523,6 +523,115 @@ theorem fixedPointF_monotone
     exact Finset.sdiff_subset_sdiff (Finset.Subset.refl _) h_complement
   exact Finset.sdiff_subset_sdiff (Finset.Subset.refl _) h_complementW
 
+
+
+
+/--
+Fleiner (2001), Lemma 7.4 / Theorem 7.3:
+The fixed point function `f` is strongly monotone.
+-/
+
+def helper_h
+    (E : Finset (M × W))
+    (school_pref : M → LinearPref W)
+    (quota : Quotas M)
+    (S : Finset (M × W)) : Finset (M × W) :=
+  E \ (S \ choiceM_all school_pref quota S)
+
+theorem helper_h_antitone
+    (E : Finset (M × W))
+    (school_pref : M → LinearPref W)
+    (quota : Quotas M)
+    (h_linear_M : ∀ m, IsLinearPref (school_pref m)) :
+    Antitone (helper_h E school_pref quota) := by
+      intro S T hST;
+      exact Finset.sdiff_subset_sdiff ( Finset.Subset.refl _ ) ( ( choiceM_classical_complement_monotone school_pref quota h_linear_M ) hST )
+
+theorem rejection_card_diff_le
+    (school_pref : M → LinearPref W)
+    (quota : Quotas M)
+    (h_linear_M : ∀ m, IsLinearPref (school_pref m))
+    (A B : Finset (M × W)) (hAB : A ⊆ B) :
+    (B \ choiceM_all school_pref quota B).card - (A \ choiceM_all school_pref quota A).card ≤ B.card - A.card := by
+      -- By definition of $R(S)$, we have $|R(S)| = |S| - |choiceM(S)|$.
+      have hR_def : ∀ S : Finset (M × W), (S \ choiceM_all school_pref quota S).card = S.card - (choiceM_all school_pref quota S).card := by
+        intro S; exact (by
+        rw [ Finset.card_sdiff ];
+        rw [ Finset.inter_eq_left.mpr ( choiceM_classical_subset _ _ _ ) ]);
+      rw [ hR_def, hR_def, tsub_le_iff_left ];
+      have h_monotone : (choiceM_all school_pref quota A).card ≤ (choiceM_all school_pref quota B).card := by
+        exact?;
+      omega
+
+theorem fixedPointF_card_eq_general
+    (E : Finset (M × W))
+    (school_pref : M → LinearPref W)
+    (student_pref : W → LinearPref M)
+    (quota : Quotas M)
+    (S : Finset (M × W)) :
+    (fixedPointF E school_pref student_pref quota S).card =
+    ((S \ choiceM_all school_pref quota S) ∩ E).card + (choiceW_all student_pref (helper_h E school_pref quota S)).card := by
+      convert Finset.card_union_of_disjoint _ using 2;
+      all_goals try infer_instance;
+      · ext ⟨ m, w ⟩ ; unfold fixedPointF; unfold helper_h; unfold choiceW_all; simp +decide [ Finset.mem_sdiff, Finset.mem_inter ] ;
+        by_cases h : ( m, w ) ∈ E <;> simp +decide [ h ];
+        · grind;
+        · unfold choiceW_classical; aesop;
+      · refine' Finset.disjoint_left.mpr _;
+        simp +contextual [ choiceW_all, helper_h ];
+        unfold choiceW_classical; aesop;
+
+
+theorem fixedPointF_strongly_monotone
+    (E : Finset (M × W))
+    (school_pref : M → LinearPref W)
+    (student_pref : W → LinearPref M)
+    (quota : Quotas M)
+    (h_linear_M : ∀ m, IsLinearPref (school_pref m))
+    (h_linear_W : ∀ w, IsLinearPref (student_pref w)) :
+    ∀ A B : Finset (M × W), A ⊆ B →
+      (fixedPointF E school_pref student_pref quota B \
+       fixedPointF E school_pref student_pref quota A).card ≤ (B \ A).card := by
+  intros A B hAB
+  have h_card_le : (fixedPointF E school_pref student_pref quota B).card - (fixedPointF E school_pref student_pref quota A).card ≤ B.card - A.card := by
+    rw [ fixedPointF_card_eq_general, fixedPointF_card_eq_general ];
+    -- By Lemma 7.3, we have `w(B).card - w(A).card ≤ 0`.
+    have h_w_le : (choiceW_all student_pref (helper_h E school_pref quota B)).card - (choiceW_all student_pref (helper_h E school_pref quota A)).card ≤ 0 := by
+      rw [ Nat.sub_eq_zero_of_le ];
+      apply_rules [ choiceW_classical_increasing ];
+      apply_rules [ helper_h_antitone ];
+    -- By Lemma 7.3, we have `k(B).card - k(A).card ≤ B.card - A.card`.
+    have h_k_le : (B \ choiceM_all school_pref quota B ∩ E).card - (A \ choiceM_all school_pref quota A ∩ E).card ≤ B.card - A.card := by
+      have h_k_le : (B \ choiceM_all school_pref quota B ∩ E).card - (A \ choiceM_all school_pref quota A ∩ E).card ≤ (B \ choiceM_all school_pref quota B).card - (A \ choiceM_all school_pref quota A).card := by
+        have h_k_le : ((B \ choiceM_all school_pref quota B) ∩ E).card - ((A \ choiceM_all school_pref quota A) ∩ E).card ≤ ((B \ choiceM_all school_pref quota B) \ (A \ choiceM_all school_pref quota A)).card := by
+          refine' Nat.sub_le_of_le_add _;
+          rw [ ← Finset.card_union_add_card_inter ];
+          exact le_add_right ( Finset.card_mono fun x hx => by by_cases hx' : x ∈ A \ choiceM_all school_pref quota A <;> aesop );
+        refine' h_k_le.trans ( Nat.le_sub_of_add_le _ );
+        rw [ ← Finset.card_union_of_disjoint ];
+        · refine' Finset.card_le_card _;
+          simp +decide [ Finset.subset_iff ];
+          rintro a b ( h | h ) <;> simp_all +decide [ Finset.subset_iff ];
+          intro h';
+          simp_all +decide [ choiceM_all, choiceM_classical ];
+          simp_all +decide [ topK ];
+          exact (not_le_of_gt (lt_of_le_of_lt (le_trans (h.2 h.1)
+          (Finset.card_mono <|
+          Finset.filter_subset_filter _ <|
+          Finset.image_subset_image <|
+          Finset.filter_subset_filter _ <|
+          Finset.subset_iff.mpr fun x hx => hAB _ _ hx))
+          (Nat.lt_succ_self _))) h'
+        · exact Finset.disjoint_left.mpr fun x hx₁ hx₂ => Finset.mem_sdiff.mp hx₁ |>.2 hx₂;
+      exact h_k_le.trans ( rejection_card_diff_le school_pref quota h_linear_M A B hAB );
+    omega;
+  convert h_card_le using 1;
+  · rw [ Finset.card_sdiff_of_subset ];
+    apply_rules [ fixedPointF_monotone ];
+  · grind
+
+
+
 /-- Iteration of the fixed point function -/
 def iterateF
     (E : Finset (M × W))
@@ -1360,14 +1469,8 @@ lemma fixedPointF_union_increasing'
     obtained by iterating from S_M1 ∪ S_M2.
 
     This is the most technical step. It combines:
-    - Path independence: choiceM_all(S₁ ∪ S₂) = choiceM_all(S_M1 ∪ S_M2)
-    - Property 14 + cardinality: choiceM_all(S_M1 ∪ S_M2) = choiceM_all(S_M*)
-
-    The second part works because:
-    1. S_M1 ∪ S_M2 ⊆ S_M* and both are "sandwich" sets
-    2. |choiceM_all(S_M1 ∪ S_M2)| = |choiceM_all(S_M*)| (by increasing + same_size chain)
-    3. Per school: topK gives same result by consistency
 -/
+
 lemma join_eq_choiceM_star
     (E : Finset (M × W))
     (school_pref : M → LinearPref W)
@@ -1384,16 +1487,6 @@ lemma join_eq_choiceM_star
     (h_sub : S_M1 ∪ S_M2 ⊆ S_M_star) :
     matchingJoin school_pref quota S₁ S₂ =
     choiceM_all school_pref quota S_M_star := by
-  -- matchingJoin = choiceM_all(S₁ ∪ S₂)
-  -- S₁ = choiceM_all(S_M1), S₂ = choiceM_all(S_M2)
-  -- By path independence (per school):
-  --   choiceM_all(choiceM_all(S_M1) ∪ choiceM_all(S_M2))
-  --   = choiceM_all(S_M1 ∪ choiceM_all(S_M2))  [path ind on first arg]
-  --   = choiceM_all(S_M1 ∪ S_M2)                [path ind on second arg]
-  -- Then choiceM_all(S_M1 ∪ S_M2) = choiceM_all(S_M_star) by consistency:
-  --   choiceM_all(S_M_star) ⊆ S_M1 ∪ S_M2 ⊆ S_M_star
-  -- The first inclusion uses cardinality: the chosen set from S_M* has the same
-  -- per-school count as from S_M1 (by stable_matchings_same_size per school).
   sorry
 
 -- =============================================
