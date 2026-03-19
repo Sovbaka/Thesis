@@ -17,3 +17,9 @@ scope = "leanprover-community"
 [[require]]
 name = "Canonical"
 scope = "chasenorman"
+
+[[require]]
+name = "Paperproof"
+git = "https://github.com/Paper-Proof/paperproof.git"
+subDir = "lean"
+rev = "main"
